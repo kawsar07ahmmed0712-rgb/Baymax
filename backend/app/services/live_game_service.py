@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-
+from app.graph.chess_graph import run_one_move_graph
 from app.agents.agent_factory import create_agent
 from app.chess.board_manager import create_initial_state, apply_move
 from app.chess.pgn_exporter import export_moves_to_pgn
@@ -83,89 +83,11 @@ class LiveGameManager:
         return create_agent(game["black_agent_id"])
 
     def play_one_step(self, game_id: str) -> dict:
+        """
+        Play one move through LangGraph workflow.
+        """
         game = self.get_game(game_id)
-        state = game["state"]
-
-        if state["game_status"]["game_over"]:
-            return {
-                "ok": False,
-                "reason": "Game is already over",
-                "game": game,
-            }
-
-        if len(state["move_history"]) >= game["max_moves"]:
-            state["game_status"] = {
-                "game_over": True,
-                "result": "1/2-1/2",
-                "reason": "max_move_limit_reached",
-                "is_check": False,
-                "turn": state["turn"],
-            }
-
-            game["updated_at"] = datetime.now(timezone.utc).isoformat()
-            return {
-                "ok": False,
-                "reason": "max_move_limit_reached",
-                "game": game,
-            }
-
-        agent = self._current_agent(game)
-        decision = agent.choose_move(state["fen"])
-
-        if not decision["ok"]:
-            state["game_status"] = {
-                "game_over": True,
-                "result": "1/2-1/2",
-                "reason": decision.get("reason", "agent_failed"),
-                "is_check": False,
-                "turn": state["turn"],
-            }
-
-            game["updated_at"] = datetime.now(timezone.utc).isoformat()
-            return {
-                "ok": False,
-                "reason": decision.get("reason", "agent_failed"),
-                "decision": decision,
-                "game": game,
-            }
-
-        updated_state = apply_move(
-            fen=state["fen"],
-            move_uci=decision["selected_move"],
-            move_history=state["move_history"],
-        )
-
-        if not updated_state["ok"]:
-            state["game_status"] = {
-                "game_over": True,
-                "result": "1/2-1/2",
-                "reason": updated_state.get("error", "illegal_move"),
-                "is_check": False,
-                "turn": state["turn"],
-            }
-
-            game["updated_at"] = datetime.now(timezone.utc).isoformat()
-            return {
-                "ok": False,
-                "reason": updated_state.get("error", "illegal_move"),
-                "decision": decision,
-                "game": game,
-            }
-
-        game["state"] = updated_state
-        game["updated_at"] = datetime.now(timezone.utc).isoformat()
-
-        return {
-            "ok": True,
-            "agent": {
-                "id": agent.id,
-                "name": agent.name,
-                "style": agent.style,
-            },
-            "decision": decision,
-            "last_move": updated_state["last_move"],
-            "game": game,
-        }
+        return run_one_move_graph(game)
 
     def reset_game(self, game_id: str) -> dict:
         game = self.get_game(game_id)

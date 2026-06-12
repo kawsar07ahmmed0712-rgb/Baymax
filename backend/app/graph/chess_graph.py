@@ -4,6 +4,7 @@ from app.graph.graph_state import MoveGraphState
 from app.graph.nodes import (
     apply_move_node,
     choose_agent_node,
+    commentary_node,
     decide_move_node,
     finalize_step_node,
     load_game_node,
@@ -22,6 +23,7 @@ def build_one_move_graph():
     graph.add_node("choose_agent", choose_agent_node)
     graph.add_node("decide_move", decide_move_node)
     graph.add_node("apply_move", apply_move_node)
+    graph.add_node("commentary", commentary_node)
     graph.add_node("finalize_step", finalize_step_node)
 
     graph.add_edge(START, "load_game")
@@ -46,7 +48,8 @@ def build_one_move_graph():
         },
     )
 
-    graph.add_edge("apply_move", "finalize_step")
+    graph.add_edge("apply_move", "commentary")
+    graph.add_edge("commentary", "finalize_step")
     graph.add_edge("finalize_step", END)
 
     return graph.compile()
@@ -60,5 +63,4 @@ def run_one_move_graph(game: dict) -> dict:
     Run compiled LangGraph workflow for one chess move.
     """
     final_state = one_move_graph.invoke({"game": game})
-
     return final_state["result"]

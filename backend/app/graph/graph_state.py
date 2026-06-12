@@ -18,7 +18,10 @@ class MoveGraphState(TypedDict, total=False):
     agent_object: Any
 
     decision: dict[str, Any]
+    previous_fen: str
     updated_state: dict[str, Any]
     last_move: dict[str, Any]
+
+    commentary: dict[str, Any]
 
     result: dict[str, Any]

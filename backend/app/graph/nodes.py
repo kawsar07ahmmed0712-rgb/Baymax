@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from app.agents.agent_factory import create_agent
 from app.chess.board_manager import apply_move
 from app.graph.graph_state import MoveGraphState
-
+from app.services.commentary_service import generate_move_commentary
 
 def _now_utc() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -143,6 +143,7 @@ def apply_move_node(state: MoveGraphState) -> MoveGraphState:
     board_state = state["board_state"]
     decision = state["decision"]
 
+    previous_fen = board_state["fen"]
     move_uci = decision["selected_move"]
 
     updated_state = apply_move(
@@ -180,12 +181,29 @@ def apply_move_node(state: MoveGraphState) -> MoveGraphState:
 
     return {
         **state,
+        "previous_fen": previous_fen,
         "updated_state": updated_state,
         "last_move": updated_state["last_move"],
         "ok": True,
         "reason": None,
     }
 
+def commentary_node(state: MoveGraphState) -> MoveGraphState:
+    """
+    Generate LLM commentary for the move.
+    """
+    commentary = generate_move_commentary(
+        agent=state["agent"],
+        decision=state["decision"],
+        last_move=state["last_move"],
+        previous_fen=state["previous_fen"],
+        new_fen=state["updated_state"]["fen"],
+    )
+
+    return {
+        **state,
+        "commentary": commentary,
+    }
 
 def finalize_step_node(state: MoveGraphState) -> MoveGraphState:
     """
@@ -203,6 +221,7 @@ def finalize_step_node(state: MoveGraphState) -> MoveGraphState:
         "agent": state["agent"],
         "decision": state["decision"],
         "last_move": state["last_move"],
+        "commentary": state.get("commentary"),
         "game": game,
     }
 
@@ -211,7 +230,6 @@ def finalize_step_node(state: MoveGraphState) -> MoveGraphState:
         "game": game,
         "result": result,
     }
-
 
 def route_after_load(state: MoveGraphState) -> str:
     """

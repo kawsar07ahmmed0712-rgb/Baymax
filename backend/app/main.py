@@ -3,6 +3,8 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
 from app.api.routes_system import router as system_router
+from app.api.routes_game import router as game_router
+from app.api.routes_agents import router as agents_router
 
 
 app = FastAPI(
@@ -13,7 +15,11 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[settings.frontend_url, "http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_origins=[
+        settings.frontend_url,
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -26,7 +32,11 @@ def root():
         "message": "Baymax backend is running",
         "docs": "/docs",
         "health": "/system/health",
+        "game_api": "/game/new",
+        "agents_api": "/agents",
     }
 
 
 app.include_router(system_router)
+app.include_router(game_router)
+app.include_router(agents_router)

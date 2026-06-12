@@ -1,22 +1,25 @@
 from datetime import datetime, timezone
-from app.graph.chess_graph import run_one_move_graph
+
+from app.adapters.database.db_factory import get_game_store
 from app.agents.agent_factory import create_agent
-from app.chess.board_manager import create_initial_state, apply_move
+from app.chess.board_manager import create_initial_state
 from app.chess.pgn_exporter import export_moves_to_pgn
 from app.core.config import settings
+from app.graph.chess_graph import run_one_move_graph
 from app.utils.ids import generate_id
 
 
 class LiveGameManager:
     """
-    In-memory live game manager.
+    Live game manager.
 
-    This is for MVP API testing.
-    Later, this will be replaced/extended with SQLite/PostgreSQL.
+    It keeps active games in memory and also saves every game to SQLite.
+    If a game is not found in memory, it tries to load it from SQLite.
     """
 
     def __init__(self):
         self.games: dict[str, dict] = {}
+        self.store = get_game_store()
 
     def create_game(
         self,
@@ -28,12 +31,13 @@ class LiveGameManager:
         black_agent = create_agent(black_agent_id)
 
         game_id = generate_id("game")
+        now = datetime.now(timezone.utc).isoformat()
         initial_state = create_initial_state()
 
         game = {
             "game_id": game_id,
-            "created_at": datetime.now(timezone.utc).isoformat(),
-            "updated_at": datetime.now(timezone.utc).isoformat(),
+            "created_at": now,
+            "updated_at": now,
             "white_agent": {
                 "id": white_agent.id,
                 "name": white_agent.name,
@@ -51,53 +55,58 @@ class LiveGameManager:
         }
 
         self.games[game_id] = game
+        self.store.save_game(game)
+
         return game
 
     def list_games(self) -> list[dict]:
-        return [
-            {
-                "game_id": game["game_id"],
-                "created_at": game["created_at"],
-                "updated_at": game["updated_at"],
-                "white_agent": game["white_agent"],
-                "black_agent": game["black_agent"],
-                "turn": game["state"]["turn"],
-                "move_count": len(game["state"]["move_history"]),
-                "game_status": game["state"]["game_status"],
-            }
-            for game in self.games.values()
-        ]
+        return self.store.list_games(limit=100)
 
     def get_game(self, game_id: str) -> dict:
-        game = self.games.get(game_id)
+        memory_game = self.games.get(game_id)
 
-        if not game:
-            raise KeyError(f"Game not found: {game_id}")
+        if memory_game:
+            return memory_game
 
-        return game
+        db_game = self.store.get_game(game_id)
 
-    def _current_agent(self, game: dict):
-        if game["state"]["turn"] == "white":
-            return create_agent(game["white_agent_id"])
+        if db_game:
+            self.games[game_id] = db_game
+            return db_game
 
-        return create_agent(game["black_agent_id"])
+        raise KeyError(f"Game not found: {game_id}")
 
     def play_one_step(self, game_id: str) -> dict:
         """
-        Play one move through LangGraph workflow.
+        Play one move through LangGraph workflow and save updated state.
         """
         game = self.get_game(game_id)
-        return run_one_move_graph(game)
+        result = run_one_move_graph(game)
+
+        if "game" in result:
+            updated_game = result["game"]
+            self.games[game_id] = updated_game
+            self.store.save_game(updated_game)
+
+        return result
 
     def reset_game(self, game_id: str) -> dict:
         game = self.get_game(game_id)
+
         game["state"] = create_initial_state()
         game["updated_at"] = datetime.now(timezone.utc).isoformat()
+
+        self.games[game_id] = game
+        self.store.save_game(game)
+
         return game
 
     def export_game_pgn(self, game_id: str) -> str:
         game = self.get_game(game_id)
         return export_moves_to_pgn(game["state"]["move_history"])
+
+    def storage_health(self) -> dict:
+        return self.store.health_check()
 
 
 live_game_manager = LiveGameManager()

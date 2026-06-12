@@ -5,6 +5,7 @@ from app.core.config import settings
 from app.api.routes_system import router as system_router
 from app.api.routes_game import router as game_router
 from app.api.routes_agents import router as agents_router
+from app.api.routes_history import router as history_router
 
 
 app = FastAPI(
@@ -32,11 +33,14 @@ def root():
         "message": "Baymax backend is running",
         "docs": "/docs",
         "health": "/system/health",
+        "db_health": "/system/db-health",
         "game_api": "/game/new",
         "agents_api": "/agents",
+        "history_api": "/history",
     }
 
 
 app.include_router(system_router)
 app.include_router(game_router)
 app.include_router(agents_router)
+app.include_router(history_router)

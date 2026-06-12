@@ -2,6 +2,7 @@ from fastapi import APIRouter
 
 from app.adapters.llm.provider_factory import get_llm_provider
 from app.core.config import settings
+from app.services.live_game_service import live_game_manager
 
 
 router = APIRouter(prefix="/system", tags=["System"])
@@ -24,3 +25,8 @@ def health_check():
 def llm_health_check():
     llm = get_llm_provider()
     return llm.health_check()
+
+
+@router.get("/db-health")
+def db_health_check():
+    return live_game_manager.storage_health()
